@@ -1,9 +1,11 @@
+// utils/mockup.js   (ESM)
+// -----------------------------------------------------------
 import path from "node:path";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 const BG_PATH = path.join(process.cwd(), "assets", "background.png");
 
-// posições centrais já definidas
+// coordenadas centrais já medidas no Photoshop
 const SLIPPER_CENTERS = [
   { x: 306, y: 330 },
   { x: 487, y: 330 },
@@ -28,31 +30,47 @@ const LABEL_CENTERS = [
   { x: 1377, y: 825 },
 ];
 
-export async function createMockup(logoBuf) {
-  // carrega o background e o logo
+/**  Ajusta um tamanho original (w,h) para caber em (maxW,maxH) mantendo a proporção */
+function fitBox(w, h, maxW, maxH) {
+  const scale = Math.min(maxW / w, maxH / h);
+  return { w: w * scale, h: h * scale };
+}
+
+export async function createMockup(logoBuffer) {
+  // carrega imagens
   const [bgImg, logoImg] = await Promise.all([
     loadImage(BG_PATH),
-    loadImage(logoBuf),
+    loadImage(logoBuffer),
   ]);
 
+  // canvas base 1920 × 1080
   const W = 1920,
     H = 1080;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
 
-  // desenha o fundo
   ctx.drawImage(bgImg, 0, 0, W, H);
 
-  // tamanhos máximos
-  const aspect = logoImg.width / logoImg.height;
+  /* ------------------------------------------------------------------ */
+  /* 1. calcula tamanhos finais                                          */
+  /*    - chinelos: máx 163 × 100                                        */
+  /*    - etiquetas: máx 64 × 60                                         */
+  const { w: SLIPPER_W, h: SLIPPER_H } = fitBox(
+    logoImg.width,
+    logoImg.height,
+    163,
+    100
+  );
 
-  const SLIPPER_H = 100;
-  const SLIPPER_W = Math.min(163, SLIPPER_H * aspect);
+  const { w: LABEL_W, h: LABEL_H } = fitBox(
+    logoImg.width,
+    logoImg.height,
+    64,
+    60
+  );
 
-  const LABEL_H = 60;
-  const LABEL_W = Math.min(64, LABEL_H * aspect);
-
-  // logos centrais dos chinelos
+  /* ------------------------------------------------------------------ */
+  /* 2. desenha logos dos chinelos e etiquetas                           */
   for (const { x, y } of SLIPPER_CENTERS) {
     ctx.drawImage(
       logoImg,
@@ -63,10 +81,9 @@ export async function createMockup(logoBuf) {
     );
   }
 
-  // logos centrais das etiquetas
   for (const { x, y } of LABEL_CENTERS) {
     ctx.drawImage(logoImg, x - LABEL_W / 2, y - LABEL_H / 2, LABEL_W, LABEL_H);
   }
 
-  return canvas.encode("png"); // Buffer PNG
+  return canvas.encode("png"); // retorna Buffer PNG
 }
