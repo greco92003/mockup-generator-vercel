@@ -1,11 +1,11 @@
-// utils/mockup.js   (ESM)
-// -----------------------------------------------------------
 import path from "node:path";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+/* ------------------------------------------------------------------ */
+/* Caminho para o background (mock‑up base)                           */
 const BG_PATH = path.join(process.cwd(), "assets", "background.png");
 
-// coordenadas centrais já medidas no Photoshop
+/* Posições centrais (X,Y) medidas no Photoshop                      */
 const SLIPPER_CENTERS = [
   { x: 306, y: 330 },
   { x: 487, y: 330 },
@@ -30,50 +30,48 @@ const LABEL_CENTERS = [
   { x: 1377, y: 825 },
 ];
 
-/**  Ajusta um tamanho original (w,h) para caber em (maxW,maxH) mantendo a proporção */
+/* Ajusta (w,h) para caber em (maxW,maxH) mantendo a proporção       */
 function fitBox(w, h, maxW, maxH) {
   const scale = Math.min(maxW / w, maxH / h);
   return { w: w * scale, h: h * scale };
 }
 
-export async function createMockup(logoBuffer) {
-  // carrega imagens
-  const [bgImg, logoImg] = await Promise.all([
+/* ------------------------------------------------------------------ */
+/* Cria o mock‑up: recebe buffer PNG do logo, devolve buffer PNG      */
+export async function createMockup(logoBuf) {
+  // Carrega imagens
+  const [bg, logo] = await Promise.all([
     loadImage(BG_PATH),
-    loadImage(logoBuffer),
+    loadImage(logoBuf),
   ]);
 
-  // canvas base 1920 × 1080
+  /* Canvas base 1920×1080 ----------------------------------------- */
   const W = 1920,
     H = 1080;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
 
-  ctx.drawImage(bgImg, 0, 0, W, H);
+  ctx.drawImage(bg, 0, 0, W, H);
 
-  /* ------------------------------------------------------------------ */
-  /* 1. calcula tamanhos finais                                          */
-  /*    - chinelos: máx 163 × 100                                        */
-  /*    - etiquetas: máx 64 × 60                                         */
+  /* Tamanhos máximos ---------------------------------------------- */
   const { w: SLIPPER_W, h: SLIPPER_H } = fitBox(
-    logoImg.width,
-    logoImg.height,
+    logo.width,
+    logo.height,
     163,
-    100
+    100 // limites para o chinelo
   );
 
   const { w: LABEL_W, h: LABEL_H } = fitBox(
-    logoImg.width,
-    logoImg.height,
+    logo.width,
+    logo.height,
     64,
-    60
+    60 // limites para a etiqueta
   );
 
-  /* ------------------------------------------------------------------ */
-  /* 2. desenha logos dos chinelos e etiquetas                           */
+  /* Desenha logos dos chinelos ------------------------------------ */
   for (const { x, y } of SLIPPER_CENTERS) {
     ctx.drawImage(
-      logoImg,
+      logo,
       x - SLIPPER_W / 2,
       y - SLIPPER_H / 2,
       SLIPPER_W,
@@ -81,9 +79,11 @@ export async function createMockup(logoBuffer) {
     );
   }
 
+  /* Desenha logos das etiquetas ----------------------------------- */
   for (const { x, y } of LABEL_CENTERS) {
-    ctx.drawImage(logoImg, x - LABEL_W / 2, y - LABEL_H / 2, LABEL_W, LABEL_H);
+    ctx.drawImage(logo, x - LABEL_W / 2, y - LABEL_H / 2, LABEL_W, LABEL_H);
   }
 
-  return canvas.encode("png"); // retorna Buffer PNG
+  /* Retorna buffer PNG -------------------------------------------- */
+  return canvas.encode("png");
 }

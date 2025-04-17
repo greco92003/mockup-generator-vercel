@@ -1,37 +1,65 @@
 // api/upload.js -------------------------------------------------------------
-import fs from "node:fs/promises";
-import path from "node:path";
-import multer from "multer";
+// Rota Serverless da Vercel para receber um arquivo `logo` (pdf/png/jpg),
+// converter PDF → PNG em memória e gerar o(s) mock‑up(s).
+
+import Busboy from "busboy";
 import { createMockup } from "../utils/mockup.js";
 import { pdfToPngBuffers } from "../utils/pdf.js";
 
-const upload = multer({ dest: "/tmp" }); // disco tmp da Vercel
+/* ------------------------------------------------------------------------ */
+/* Helper: lê multipart/form‑data e devolve { buffer, mime }                */
+function receiveFile(req) {
+  return new Promise((resolve, reject) => {
+    const bb = Busboy({
+      headers: req.headers,
+      limits: { files: 1, fileSize: 8e6 },
+    });
 
+    let fileBuf = Buffer.alloc(0);
+    let mime = "";
+
+    bb.on("file", (_, stream, info) => {
+      mime = info.mimeType;
+      stream.on("data", (d) => (fileBuf = Buffer.concat([fileBuf, d])));
+    });
+
+    bb.on("finish", () => resolve({ buffer: fileBuf, mime }));
+    bb.on("error", reject);
+
+    req.pipe(bb);
+  });
+}
+
+/* ------------------------------------------------------------------------ */
+/* Handler principal                                                        */
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
-
-  await new Promise((ok, err) =>
-    upload.single("logo")(req, res, (e) => (e ? err(e) : ok()))
-  );
+  if (req.method !== "POST") {
+    res.status(405).send("Método não permitido");
+    return;
+  }
 
   try {
-    const filePath = req.file.path;
-    const mime = req.file.mimetype;
+    // 1. recebe arquivo
+    const { buffer: fileBuffer, mime } = await receiveFile(req);
 
-    const buffers =
+    // 2. se PDF → gera array de PNGs; se imagem → único PNG
+    const pageBuffers =
       mime === "application/pdf"
-        ? await pdfToPngBuffers(await fs.readFile(filePath))
-        : [await fs.readFile(filePath)]; // png/jpg já prontos
+        ? await pdfToPngBuffers(fileBuffer) // [bufPage1, bufPage2, …]
+        : [fileBuffer];
 
-    const results = await Promise.all(buffers.map(createMockup));
+    // 3. cria mock‑ups para cada página
+    const mockups = await Promise.all(pageBuffers.map(createMockup));
 
-    // devolve o(s) mockup(s) como ZIP ou apenas o primeiro, escolha:
+    // 4. devolve o primeiro mock‑up (ou zip, se quiser todos)
     res.setHeader("Content-Type", "image/png");
-    res.send(results[0]);
-  } catch (e) {
-    console.error(e);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="mockup_${Date.now()}.png"`
+    );
+    res.send(mockups[0]);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Erro ao processar mockup" });
-  } finally {
-    fs.unlink(req.file.path).catch(() => {}); // limpa /tmp
   }
 }
