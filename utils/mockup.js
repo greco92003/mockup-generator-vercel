@@ -44,33 +44,13 @@ export async function createMockup(logoBuf) {
   ctx.drawImage(bgImg, 0, 0, W, H);
 
   // tamanhos máximos
-  /* -------------------------------------------------------------------- */
-  /* 1. calcula proporção                                                 */
-  const aspect = logoImg.width / logoImg.height; // >1 => landscape
+  const aspect = logoImg.width / logoImg.height;
 
-  /* 2. logos dos chinelos ------------------------------------------------ */
-  const SLIPPER_H_MAX = 100;
-  const SLIPPER_W_MAX = 163;
+  const SLIPPER_H = 100;
+  const SLIPPER_W = Math.min(163, SLIPPER_H * aspect);
 
-  let slipperW = SLIPPER_H_MAX * aspect;
-  let slipperH = SLIPPER_H_MAX;
-
-  if (slipperW > SLIPPER_W_MAX) {
-    slipperW = SLIPPER_W_MAX;
-    slipperH = slipperW / aspect; // ajusta altura
-  }
-
-  /* 3. logos das etiquetas ---------------------------------------------- */
-  const LABEL_H_MAX = 60;
-  const LABEL_W_MAX = 64;
-
-  let labelW = LABEL_H_MAX * aspect;
-  let labelH = LABEL_H_MAX;
-
-  if (labelW > LABEL_W_MAX) {
-    labelW = LABEL_W_MAX;
-    labelH = labelW / aspect; // ajusta altura
-  }
+  const LABEL_H = 60;
+  const LABEL_W = Math.min(64, LABEL_H * aspect);
 
   // logos centrais dos chinelos
   for (const { x, y } of SLIPPER_CENTERS) {
@@ -85,13 +65,7 @@ export async function createMockup(logoBuf) {
 
   // logos centrais das etiquetas
   for (const { x, y } of LABEL_CENTERS) {
-    ctx.drawImage(
-      logoImg,
-      x - slipperW / 2,
-      y - slipperH / 2,
-      slipperW,
-      slipperH
-    );
+    ctx.drawImage(logoImg, x - LABEL_W / 2, y - LABEL_H / 2, LABEL_W, LABEL_H);
   }
 
   return canvas.encode("png"); // Buffer PNG
