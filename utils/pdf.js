@@ -1,34 +1,33 @@
 // utils/pdf.js --------------------------------------------------------------
-import {
-  getDocument,
-  GlobalWorkerOptions,
-} from "pdfjs-dist/legacy/build/pdf.js";
+// Converte cada página do PDF em Buffer PNG sem GhostScript / ImageMagick.
+// Funciona em Vercel Functions porque usa apenas JS + @napi-rs/canvas.
+
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js"; // importa CJS como namespace
 import { createCanvas } from "@napi-rs/canvas";
 
-// evita busca de worker externo
-GlobalWorkerOptions.workerSrc = false;
+// evita a busca automática de worker externo (não é necessária em Node)
+pdfjs.GlobalWorkerOptions.workerSrc = undefined;
 
-/** Converte cada página do PDF (buffer) em um Buffer PNG
- *  @return  Array<Buffer>
+/**
+ * @param {Buffer} pdfBuffer  Arquivo PDF
+ * @param {number} dpi        Resolução de saída (padrão 150)
+ * @return {Promise<Buffer[]>} Array de buffers PNG (uma por página)
  */
-export async function pdfToPngBuffers(pdfBuffer) {
-  const doc = await getDocument({ data: pdfBuffer }).promise;
+export async function pdfToPngBuffers(pdfBuffer, dpi = 150) {
+  const doc = await pdfjs.getDocument({ data: pdfBuffer }).promise;
 
-  const pngBuffers = [];
-  for (let p = 1; p <= doc.numPages; ++p) {
+  const pages = [];
+  for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
 
-    // resolução (~150 dpi) —  em pixels:  8.5in *150 ≈ 1275
-    const scale = 150 / 72; // PDF user‑space = 72 dpi
-    const viewport = page.getViewport({ scale });
-
+    const viewport = page.getViewport({ scale: dpi / 72 });
     const canvas = createCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext("2d");
 
     await page.render({ canvasContext: ctx, viewport }).promise;
-    pngBuffers.push(canvas.encode("png"));
+    pages.push(canvas.encode("png"));
   }
 
   await doc.destroy();
-  return pngBuffers;
+  return pages;
 }
