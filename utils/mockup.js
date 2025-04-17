@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "canvas";
 
 /* ------------------------------------------------------------------ */
 /* Caminho para o background (mock‑up base)                           */

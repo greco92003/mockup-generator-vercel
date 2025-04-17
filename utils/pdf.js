@@ -3,7 +3,7 @@
 // Funciona em Vercel Functions porque usa apenas JS + @napi-rs/canvas.
 
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js"; // importa CJS como namespace
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas } from "canvas";
 
 // evita a busca automática de worker externo (não é necessária em Node)
 pdfjs.GlobalWorkerOptions.workerSrc = undefined;
