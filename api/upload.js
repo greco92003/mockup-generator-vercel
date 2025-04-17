@@ -1,75 +1,37 @@
-import fs from "node:fs";
+// api/upload.js -------------------------------------------------------------
+import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
-import Busboy from "busboy";
-
+import multer from "multer";
 import { createMockup } from "../utils/mockup.js";
-import { pdfPageToPNG } from "../utils/pdf2png.js";
+import { pdfToPngBuffers } from "../utils/pdf.js";
 
-const unlink = promisify(fs.unlink);
+const upload = multer({ dest: "/tmp" }); // disco tmp da Vercel
 
-/**
- * Vercel serverless function – recebe um arquivo ‘logo’ (pdf|png|jpg),
- * gera a composição e devolve o PNG final.
- */
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).send("Método não permitido");
-    return;
-  }
+  if (req.method !== "POST") return res.status(405).end();
+
+  await new Promise((ok, err) =>
+    upload.single("logo")(req, res, (e) => (e ? err(e) : ok()))
+  );
 
   try {
-    const { buffer, filename, mime } = await receiveFile(req);
+    const filePath = req.file.path;
+    const mime = req.file.mimetype;
 
-    // --- converte para PNG se for PDF ---------------------------------------
-    let logoPngBuffer = buffer;
-    if (mime === "application/pdf") {
-      // Converte apenas a primeira página; ajuste se quiser todas
-      logoPngBuffer = await pdfPageToPNG(buffer, 0);
-    }
+    const buffers =
+      mime === "application/pdf"
+        ? await pdfToPngBuffers(await fs.readFile(filePath))
+        : [await fs.readFile(filePath)]; // png/jpg já prontos
 
-    // ------------------------------------------------------------------------
-    const finalPng = await createMockup(logoPngBuffer);
+    const results = await Promise.all(buffers.map(createMockup));
 
+    // devolve o(s) mockup(s) como ZIP ou apenas o primeiro, escolha:
     res.setHeader("Content-Type", "image/png");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="resultado_${Date.now()}.png"`
-    );
-    res.send(finalPng);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Erro ao processar mockup");
+    res.send(results[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao processar mockup" });
+  } finally {
+    fs.unlink(req.file.path).catch(() => {}); // limpa /tmp
   }
-}
-
-/* -------------------------------------------------------------------------- */
-
-function receiveFile(req) {
-  return new Promise((resolve, reject) => {
-    const bb = Busboy({
-      headers: req.headers,
-      limits: { files: 1, fileSize: 5e6 },
-    });
-
-    let fileBuffer = Buffer.alloc(0);
-    let fileName = "";
-    let mimeType = "";
-
-    bb.on("file", (_, stream, info) => {
-      fileName = info.filename;
-      mimeType = info.mimeType;
-
-      stream.on("data", (d) => (fileBuffer = Buffer.concat([fileBuffer, d])));
-    });
-
-    bb.on("finish", () => {
-      if (!fileBuffer.length)
-        return reject(new Error("Nenhum arquivo enviado"));
-      resolve({ buffer: fileBuffer, filename: fileName, mime: mimeType });
-    });
-
-    bb.on("error", reject);
-    req.pipe(bb);
-  });
 }
